@@ -1,6 +1,6 @@
 import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Html, useGLTF } from '@react-three/drei';
+import { DragControls, Html, OrbitControls, useGLTF } from '@react-three/drei';
 import {
   AnimationAction,
   AnimationClip,
@@ -1203,6 +1203,8 @@ const Scene = memo(function Scene({
   const npcCharacterRef = useRef<Group | null>(null);
   const nearestNpcRef = useRef<Agent | null>(null);
   const [isNpcInRange, setIsNpcInRange] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [npcPosition, setNpcPosition] = useState<[number, number, number]>(NPC_AGENT_POSITION);
   const interactionRadiusSq = NPC_INTERACTION_DISTANCE * NPC_INTERACTION_DISTANCE;
 
   useFrame((state) => {
@@ -1276,6 +1278,7 @@ const Scene = memo(function Scene({
 
   return (
     <>
+      <OrbitControls makeDefault enabled={!isDragging} />
       <color attach="background" args={[SCENE_BACKGROUND_COLOR]} />
       <ambientLight color={SCENE_AMBIENT_COLOR} intensity={SCENE_AMBIENT_INTENSITY} />
       <directionalLight color="#fff4e0" position={[10, 20, 10]} intensity={2.5} />
@@ -1289,16 +1292,29 @@ const Scene = memo(function Scene({
 
       <gridHelper args={[GRID_SIZE, GRID_DIVISIONS, '#2f5a34', '#4a7f4a']} position={[0, 0.002, 0]} />
 
-      <NPCCharacter
-        agent={npcAgent}
-        characterRootRef={npcCharacterRef}
-        showTalkPrompt={isNpcInRange && !isChatting}
-        chatStatus={npcChatStatus}
-        showTypingIndicator={Boolean(activeChatAgent?.id === npcAgent.id)}
-        uiHeight={character.uiHeight}
-        isChatting={isChatting}
-        position={NPC_AGENT_POSITION}
-      />
+      <DragControls
+        axisLock="y"
+        onDragStart={() => setIsDragging(true)}
+        onDragEnd={(event) => {
+          const object = event.object;
+          if (object && object.position) {
+            object.position.y = 0;
+            setNpcPosition([object.position.x, 0, object.position.z]);
+          }
+          setIsDragging(false);
+        }}
+      >
+        <NPCCharacter
+          agent={npcAgent}
+          characterRootRef={npcCharacterRef}
+          showTalkPrompt={isNpcInRange && !isChatting}
+          chatStatus={npcChatStatus}
+          showTypingIndicator={Boolean(activeChatAgent?.id === npcAgent.id)}
+          uiHeight={character.uiHeight}
+          isChatting={isChatting}
+          position={npcPosition}
+        />
+      </DragControls>
       <Character
         controlsRef={controlsRef}
         character={character}
