@@ -1,6 +1,6 @@
 import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { DragControls, Html, useGLTF } from '@react-three/drei';
+import { DragControls, Html, OrbitControls, useGLTF } from '@react-three/drei';
 import {
   AnimationAction,
   AnimationClip,
@@ -173,6 +173,8 @@ const NPC_AGENT_IDLE_CLIP_NAME = 'Idle';
 const NPC_AGENT_POSITION: [number, number, number] = [5, 0, 5];
 const NPC_INTERACTION_DISTANCE = 5;
 const WORLD_UP_VECTOR = new Vector3(0, 1, 0);
+const GOD_MODE_CAMERA_POSITION = new Vector3(0, 30, 0);
+const GOD_MODE_LOOK_TARGET = new Vector3(0, 0, 0);
 
 const DEFAULT_CONTROLS: ControlState = {
   forward: false,
@@ -1187,6 +1189,7 @@ const Scene = memo(function Scene({
   onRangeChange,
   npcChatStatus,
   isChatting,
+  isGodMode,
 }: {
   controlsRef: MutableRefObject<ControlState>;
   character: CharacterDefinition;
@@ -1196,6 +1199,7 @@ const Scene = memo(function Scene({
   onRangeChange: (agent: Agent | null) => void;
   npcChatStatus: ChatStatus;
   isChatting: boolean;
+  isGodMode: boolean;
 }) {
   const playerWorldPosition = useRef(new Vector3());
   const npcWorldPosition = useRef(new Vector3());
@@ -1206,11 +1210,29 @@ const Scene = memo(function Scene({
   const sideDirection = useRef(new Vector3());
   const npcCharacterRef = useRef<Group | null>(null);
   const nearestNpcRef = useRef<Agent | null>(null);
+  const hasGodCameraSnap = useRef(false);
   const [isNpcInRange, setIsNpcInRange] = useState(false);
   const [npcPosition, setNpcPosition] = useState<[number, number, number]>(NPC_AGENT_POSITION);
   const interactionRadiusSq = NPC_INTERACTION_DISTANCE * NPC_INTERACTION_DISTANCE;
 
   useFrame((state) => {
+    if (isGodMode) {
+      if (!hasGodCameraSnap.current) {
+        state.camera.position.lerp(GOD_MODE_CAMERA_POSITION, 0.06);
+        state.camera.lookAt(GOD_MODE_LOOK_TARGET);
+        if (state.camera.position.distanceTo(GOD_MODE_CAMERA_POSITION) < 0.1) {
+          hasGodCameraSnap.current = true;
+          state.camera.position.copy(GOD_MODE_CAMERA_POSITION);
+          state.camera.lookAt(GOD_MODE_LOOK_TARGET);
+        }
+      }
+      return;
+    }
+
+    if (hasGodCameraSnap.current) {
+      hasGodCameraSnap.current = false;
+    }
+
     const { camera } = state;
     const playerCharacter = playerCharacterRef.current;
     if (!playerCharacter) {
@@ -1286,6 +1308,7 @@ const Scene = memo(function Scene({
       <directionalLight color="#fff4e0" position={[10, 20, 10]} intensity={2.5} />
       <directionalLight color="#a0b0d0" position={[-10, 5, -10]} intensity={0.5} />
       <hemisphereLight args={[SCENE_HEMI_SKY_COLOR, SCENE_HEMI_GROUND_COLOR, SCENE_HEMI_INTENSITY]} />
+      {isGodMode ? <OrbitControls makeDefault /> : null}
 
       <mesh rotation-x={-Math.PI / 2}>
         <planeGeometry args={[GRID_SIZE, GRID_SIZE]} />
@@ -1295,6 +1318,7 @@ const Scene = memo(function Scene({
       <gridHelper args={[GRID_SIZE, GRID_DIVISIONS, '#2f5a34', '#4a7f4a']} position={[0, 0.002, 0]} />
 
       <DragControls
+        enabled={isGodMode}
         axisLock="y"
         onDragEnd={(event) => {
           const object = event.object;
@@ -1315,12 +1339,14 @@ const Scene = memo(function Scene({
           position={npcPosition}
         />
       </DragControls>
-      <Character
-        controlsRef={controlsRef}
-        character={character}
-        characterRootRef={playerCharacterRef}
-        isChatting={isChatting}
-      />
+      {!isGodMode ? (
+        <Character
+          controlsRef={controlsRef}
+          character={character}
+          characterRootRef={playerCharacterRef}
+          isChatting={isChatting}
+        />
+      ) : null}
     </>
   );
 });
@@ -1341,9 +1367,33 @@ function App() {
   const [targetNpcAgent, setTargetNpcAgent] = useState<Agent | null>(null);
   const [activeChatAgent, setActiveChatAgent] = useState<Agent | null>(null);
   const [isChatting, setIsChatting] = useState(false);
+  const [isGodMode, setIsGodMode] = useState(false);
   const selectedCharacter = CHARACTER_DEFINITIONS[selectedCharacterId];
   const playerCharacterRef = useRef<Group | null>(null);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'KeyG' || event.repeat) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        return;
+      }
+
+      const tagName = target.tagName.toLowerCase();
+      if (target.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+        return;
+      }
+
+      setIsGodMode((prev) => !prev);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   useEffect(() => {
     if (isChatting) {
@@ -1591,6 +1641,7 @@ function App() {
             onRangeChange={setTargetNpcAgent}
             npcChatStatus={chatStatus}
             isChatting={isChatting}
+            isGodMode={isGodMode}
           />
         </Suspense>
       </Canvas>
