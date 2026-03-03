@@ -173,7 +173,7 @@ const NPC_AGENT_IDLE_CLIP_NAME = 'Idle';
 const NPC_AGENT_POSITION: [number, number, number] = [5, 0, 5];
 const NPC_INTERACTION_DISTANCE = 5;
 const WORLD_UP_VECTOR = new Vector3(0, 1, 0);
-const GOD_MODE_CAMERA_POSITION = new Vector3(0, 30, 0);
+const GOD_MODE_CAMERA_OFFSET = new Vector3(30, 30, 30);
 const GOD_MODE_LOOK_TARGET = new Vector3(0, 0, 0);
 
 const DEFAULT_CONTROLS: ControlState = {
@@ -1210,27 +1210,28 @@ const Scene = memo(function Scene({
   const sideDirection = useRef(new Vector3());
   const npcCharacterRef = useRef<Group | null>(null);
   const nearestNpcRef = useRef<Agent | null>(null);
-  const hasGodCameraSnap = useRef(false);
+  const godModeTargetRef = useRef(GOD_MODE_LOOK_TARGET.clone());
+  const godModeDesiredCameraRef = useRef(GOD_MODE_CAMERA_OFFSET.clone());
   const [isNpcInRange, setIsNpcInRange] = useState(false);
   const [npcPosition, setNpcPosition] = useState<[number, number, number]>(NPC_AGENT_POSITION);
   const interactionRadiusSq = NPC_INTERACTION_DISTANCE * NPC_INTERACTION_DISTANCE;
 
   useFrame((state) => {
     if (isGodMode) {
-      if (!hasGodCameraSnap.current) {
-        state.camera.position.lerp(GOD_MODE_CAMERA_POSITION, 0.06);
-        state.camera.lookAt(GOD_MODE_LOOK_TARGET);
-        if (state.camera.position.distanceTo(GOD_MODE_CAMERA_POSITION) < 0.1) {
-          hasGodCameraSnap.current = true;
-          state.camera.position.copy(GOD_MODE_CAMERA_POSITION);
-          state.camera.lookAt(GOD_MODE_LOOK_TARGET);
-        }
+      const orbitControls = (state as unknown as { controls?: { target?: Vector3 } }).controls;
+      const target = orbitControls?.target;
+      if (target) {
+        godModeTargetRef.current.copy(target);
+      } else {
+        godModeTargetRef.current.copy(GOD_MODE_LOOK_TARGET);
       }
-      return;
-    }
 
-    if (hasGodCameraSnap.current) {
-      hasGodCameraSnap.current = false;
+      godModeDesiredCameraRef.current
+        .copy(godModeTargetRef.current)
+        .add(GOD_MODE_CAMERA_OFFSET);
+      state.camera.position.lerp(godModeDesiredCameraRef.current, 0.08);
+      state.camera.lookAt(godModeTargetRef.current);
+      return;
     }
 
     const { camera } = state;
@@ -1308,7 +1309,14 @@ const Scene = memo(function Scene({
       <directionalLight color="#fff4e0" position={[10, 20, 10]} intensity={2.5} />
       <directionalLight color="#a0b0d0" position={[-10, 5, -10]} intensity={0.5} />
       <hemisphereLight args={[SCENE_HEMI_SKY_COLOR, SCENE_HEMI_GROUND_COLOR, SCENE_HEMI_INTENSITY]} />
-      {isGodMode ? <OrbitControls makeDefault /> : null}
+      {isGodMode ? (
+        <OrbitControls
+          makeDefault
+          enableRotate={false}
+          enablePan={true}
+          enableZoom={true}
+        />
+      ) : null}
 
       <mesh rotation-x={-Math.PI / 2}>
         <planeGeometry args={[GRID_SIZE, GRID_SIZE]} />
