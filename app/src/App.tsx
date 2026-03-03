@@ -1168,6 +1168,10 @@ const NPCCharacter = memo(function NPCCharacter({
           </Html>
         </group>
       ) : null}
+      <mesh position={[0, 2, 0]} onPointerDown={(event) => event.stopPropagation()}>
+        <boxGeometry args={[2, 4, 2]} />
+        <meshBasicMaterial visible={false} transparent opacity={0} />
+      </mesh>
       <primitive object={model} />
     </group>
   );
